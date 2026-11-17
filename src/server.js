@@ -3,11 +3,21 @@ const db = require("./db/knex");
 const { createApp } = require("./app");
 const { createKnexUnitOfWork } = require("./db/unitOfWork");
 const { createUsersRepository } = require("./modules/auth/users.repository.knex");
+const { createAuditRepository } = require("./modules/audit/audit.repository.knex");
+const { createEventBus } = require("./events/eventBus");
+const { registerAuditListeners } = require("./events/auditListeners");
+const { registerNotificationListeners } = require("./events/notificationListeners");
+
+const eventBus = createEventBus();
+registerAuditListeners(eventBus, db);
+registerNotificationListeners(eventBus, db);
 
 const app = createApp({
   config,
   runInTransaction: createKnexUnitOfWork(db).runInTransaction,
-  usersRepository: createUsersRepository(db)
+  usersRepository: createUsersRepository(db),
+  eventBus,
+  auditRepository: createAuditRepository(db)
 });
 
 const server = app.listen(config.PORT, () => {

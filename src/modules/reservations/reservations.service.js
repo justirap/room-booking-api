@@ -1,4 +1,5 @@
 const { NotFoundError, ConflictError, ValidationError, ForbiddenError } = require("../../errors/AppError");
+const { noopEventBus } = require("../../events/eventBus");
 
 const MIN_DURATION_MS = 15 * 60 * 1000;
 const MAX_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -11,7 +12,15 @@ function canAccessReservation(reservation, currentUser) {
   return reservation.user.id === currentUser.id || currentUser.role === "ADMIN";
 }
 
-function createReservationsService({ runInTransaction, now = () => new Date() }) {
+function roomIdOf(reservation, fallback) {
+  return reservation.room?.id ?? reservation.roomId ?? fallback;
+}
+
+function userIdOf(reservation, fallback) {
+  return reservation.user?.id ?? reservation.userId ?? fallback;
+}
+
+function createReservationsService({ runInTransaction, eventBus = noopEventBus, now = () => new Date() }) {
   return {
     async listReservations(query, currentUser) {
       if (currentUser.role !== "ADMIN" && query.userId !== undefined) {
@@ -45,7 +54,7 @@ function createReservationsService({ runInTransaction, now = () => new Date() })
     },
 
     async createReservation(input, currentUser) {
-      return runInTransaction(async ({ rooms, reservations }) => {
+      const created = await runInTransaction(async ({ rooms, reservations }) => {
         await rooms.lockById(input.roomId);
         const room = await rooms.findById(input.roomId);
         if (!room) throw new NotFoundError("Room");
@@ -93,15 +102,26 @@ function createReservationsService({ runInTransaction, now = () => new Date() })
           cancelledAt: null
         });
       });
+
+      eventBus.publish("reservation.created", {
+        reservationId: created.id,
+        roomId: roomIdOf(created, input.roomId),
+        userId: currentUser.id,
+        startTime: new Date(created.startTime).toISOString(),
+        endTime: new Date(created.endTime).toISOString()
+      });
+      return created;
     },
 
     async cancelReservation(id, currentUser) {
-      return runInTransaction(async ({ reservations }) => {
+      const outcome = await runInTransaction(async ({ reservations }) => {
         const reservation = await reservations.findById(id);
         if (!reservation || !canAccessReservation(reservation, currentUser)) {
           throw new NotFoundError("Reservation");
         }
-        if (reservation.status === "CANCELLED") return reservation;
+        if (reservation.status === "CANCELLED") {
+          return { reservation, changed: false };
+        }
 
         if (new Date(reservation.startTime).getTime() <= now().getTime()) {
           throw new ConflictError("Reservation has already started", "RESERVATION_ALREADY_STARTED");
@@ -115,8 +135,19 @@ function createReservationsService({ runInTransaction, now = () => new Date() })
           );
         }
 
-        return reservations.markCancelled(id, now().toISOString());
+        const updated = await reservations.markCancelled(id, now().toISOString());
+        return { reservation: updated, changed: true };
       });
+
+      if (outcome.changed) {
+        eventBus.publish("reservation.cancelled", {
+          reservationId: outcome.reservation.id,
+          roomId: roomIdOf(outcome.reservation),
+          userId: userIdOf(outcome.reservation),
+          cancelledBy: currentUser.id
+        });
+      }
+      return outcome.reservation;
     }
   };
 }

@@ -4,11 +4,21 @@ const db = require("../../src/db/knex");
 const { createApp } = require("../../src/app");
 const { createKnexUnitOfWork } = require("../../src/db/unitOfWork");
 const { createUsersRepository } = require("../../src/modules/auth/users.repository.knex");
+const { createAuditRepository } = require("../../src/modules/audit/audit.repository.knex");
+const { createEventBus } = require("../../src/events/eventBus");
+const { registerAuditListeners } = require("../../src/events/auditListeners");
+const { registerNotificationListeners } = require("../../src/events/notificationListeners");
+
+const eventBus = createEventBus();
+registerAuditListeners(eventBus, db);
+registerNotificationListeners(eventBus, db);
 
 const app = createApp({
   config,
   runInTransaction: createKnexUnitOfWork(db).runInTransaction,
-  usersRepository: createUsersRepository(db)
+  usersRepository: createUsersRepository(db),
+  eventBus,
+  auditRepository: createAuditRepository(db)
 });
 
 const PASSWORD = "password-123";
@@ -59,12 +69,22 @@ async function createBuildingAndRoom(adminToken, { name = "101", capacity = 10 }
   return room.body;
 }
 
+async function waitFor(predicate, { attempts = 25, delayMs = 40 } = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const value = await predicate();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  return null;
+}
+
 beforeAll(async () => {
   await db.migrate.latest();
 });
 
 beforeEach(async () => {
-  await db.raw("TRUNCATE reservations, rooms, buildings, users RESTART IDENTITY CASCADE");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  await db.raw("TRUNCATE audit_log, reservations, rooms, buildings, users RESTART IDENTITY CASCADE");
 });
 
 afterAll(async () => {
@@ -204,5 +224,83 @@ describe("Auth and reservations API", () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(2);
     expect(res.body.meta.total).toBe(3);
+  });
+});
+
+describe("audit log", () => {
+  test("records create, skips a failed collision and an idempotent cancel", async () => {
+    const logs = [];
+    const logSpy = jest.spyOn(console, "log").mockImplementation((message) => {
+      logs.push(String(message));
+    });
+
+    try {
+      const adminToken = await registerAdminAndLogin("admin@example.com");
+      const ownerToken = await registerAndLogin("owner@example.com");
+      const room = await createBuildingAndRoom(adminToken);
+      const range = futureRange(30, 1);
+
+      const created = await request(app)
+        .post("/api/reservations")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ roomId: room.id, participants: 2, ...range })
+        .expect(201);
+
+      await request(app)
+        .post("/api/reservations")
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          roomId: room.id,
+          participants: 2,
+          startTime: new Date(new Date(range.startTime).getTime() + 15 * 60 * 1000).toISOString(),
+          endTime: new Date(new Date(range.endTime).getTime() + 15 * 60 * 1000).toISOString()
+        })
+        .expect(409);
+
+      await request(app)
+        .patch(`/api/reservations/${created.body.id}/cancel`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(200);
+
+      await request(app)
+        .patch(`/api/reservations/${created.body.id}/cancel`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .expect(200);
+
+      const rows = await waitFor(async () => {
+        const found = await db("audit_log").select("event_type", "payload").orderBy("id", "asc");
+        return found.length >= 2 ? found : null;
+      });
+
+      expect(rows.map((row) => row.event_type)).toEqual([
+        "reservation.created",
+        "reservation.cancelled"
+      ]);
+      expect(logs.some((line) => line.startsWith("[notification] to: owner@example.com"))).toBe(true);
+
+      const audit = await request(app)
+        .get("/api/admin/audit-log")
+        .set("Authorization", `Bearer ${adminToken}`);
+      expect(audit.status).toBe(200);
+      expect(audit.body.meta.total).toBe(2);
+      expect(audit.body.data.map((entry) => entry.eventType)).toEqual([
+        "reservation.cancelled",
+        "reservation.created"
+      ]);
+
+      const filtered = await request(app)
+        .get("/api/admin/audit-log")
+        .query({ eventType: "reservation.cancelled" })
+        .set("Authorization", `Bearer ${adminToken}`);
+      expect(filtered.body.data).toHaveLength(1);
+      expect(filtered.body.meta.total).toBe(1);
+
+      const forbidden = await request(app)
+        .get("/api/admin/audit-log")
+        .set("Authorization", `Bearer ${ownerToken}`);
+      expect(forbidden.status).toBe(403);
+    } finally {
+      logSpy.mockRestore();
+    }
   });
 });
