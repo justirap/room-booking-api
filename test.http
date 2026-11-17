@@ -1,0 +1,203 @@
+### rejestracja
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "Marta.Lis@example.com",
+  "password": "bardzo-dlugie-haslo"
+}
+
+### rejestracja z rolą
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "rola@example.com",
+  "password": "bardzo-dlugie-haslo",
+  "role": "ADMIN"
+}
+
+### za krótkie hasło
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "krotkie@example.com",
+  "password": "krotkie"
+}
+
+### ten sam email innymi literami
+POST http://localhost:3000/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "marta.lis@example.com",
+  "password": "inne-dlugie-haslo"
+}
+
+### złe hasło
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "jan.kowalski@example.com",
+  "password": "zle-haslo-123"
+}
+
+### zły email
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "nikt@example.com",
+  "password": "user-password-123"
+}
+
+### login Jana
+# @name loginJan
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "jan.kowalski@example.com",
+  "password": "user-password-123"
+}
+
+### login Anny
+# @name loginAnna
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "anna.nowak@example.com",
+  "password": "user-password-123"
+}
+
+### login admina
+# @name loginAdmin
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "admin-password-123"
+}
+
+### kto jestem
+GET http://localhost:3000/api/auth/me
+Authorization: Bearer "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiQURNSU4iLCJpYXQiOjE3OTM2MzE5ODIsImV4cCI6MTc5MzYzMjg4Miwic3ViIjoiMyJ9.HdhMD1C_PrrhjMy2rXtEJ7mVhseo10BMHMGyLCfivxI"
+
+### brak tokenu
+GET http://localhost:3000/api/buildings
+
+### zły format nagłówka
+GET http://localhost:3000/api/buildings
+Authorization: Basic abc
+
+### Bearer bez tokenu
+GET http://localhost:3000/api/buildings
+Authorization: Bearer
+
+### lista własnych rezerwacji Jana
+GET http://localhost:3000/api/reservations
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+
+### Jan próbuje filtr userId
+GET http://localhost:3000/api/reservations?userId=2
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+
+### admin widzi wszystkie
+GET http://localhost:3000/api/reservations
+Authorization: Bearer {{loginAdmin.response.body.accessToken}}
+
+### admin filtruje użytkownika
+GET http://localhost:3000/api/reservations?userId=3
+Authorization: Bearer {{loginAdmin.response.body.accessToken}}
+
+### Jan czyta swoją rezerwację 2
+GET http://localhost:3000/api/reservations/2
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+
+### Anna czyta cudzą rezerwację 2
+GET http://localhost:3000/api/reservations/2
+Authorization: Bearer {{loginAnna.response.body.accessToken}}
+
+### admin czyta rezerwację 2
+GET http://localhost:3000/api/reservations/2
+Authorization: Bearer {{loginAdmin.response.body.accessToken}}
+
+### Anna anuluje cudzą rezerwację 2
+PATCH http://localhost:3000/api/reservations/2/cancel
+Authorization: Bearer {{loginAnna.response.body.accessToken}}
+
+### admin anuluje rozpoczętą rezerwację 1
+PATCH http://localhost:3000/api/reservations/1/cancel
+Authorization: Bearer {{loginAdmin.response.body.accessToken}}
+
+### USER tworzy budynek
+POST http://localhost:3000/api/buildings
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Budynek E",
+  "address": "ul. Długa 9, Kraków"
+}
+
+### ADMIN tworzy budynek
+POST http://localhost:3000/api/buildings
+Authorization: Bearer {{loginAdmin.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "name": "Budynek E",
+  "address": "ul. Długa 9, Kraków"
+}
+
+### USER czyta budynki
+GET http://localhost:3000/api/buildings
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+
+### nowa rezerwacja Jana
+POST http://localhost:3000/api/reservations
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "roomId": 1,
+  "participants": 4,
+  "startTime": "2026-12-20T10:00:00.000Z",
+  "endTime": "2026-12-20T12:00:00.000Z"
+}
+
+### body z userId
+POST http://localhost:3000/api/reservations
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "roomId": 1,
+  "userId": 1,
+  "participants": 4,
+  "startTime": "2026-12-21T10:00:00.000Z",
+  "endTime": "2026-12-21T12:00:00.000Z"
+}
+
+### body z reservedBy
+POST http://localhost:3000/api/reservations
+Authorization: Bearer {{loginJan.response.body.accessToken}}
+Content-Type: application/json
+
+{
+  "roomId": 1,
+  "reservedBy": "Jan Kowalski",
+  "participants": 4,
+  "startTime": "2026-12-21T10:00:00.000Z",
+  "endTime": "2026-12-21T12:00:00.000Z"
+}
+
+
+### 
+
+PATCH http://localhost:3000/api/reservations/2/cancel
+Authorization: Bearer {{loginJan.response.body.accessToken}}
