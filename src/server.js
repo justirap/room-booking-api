@@ -10,6 +10,23 @@ const app = createApp({
   usersRepository: createUsersRepository(db)
 });
 
-app.listen(config.PORT, () => {
+const server = app.listen(config.PORT, () => {
   console.log(`Server running on http://localhost:${config.PORT}`);
 });
+
+function shutdown(signal) {
+  console.log(`${signal} received, shutting down`);
+  if (typeof server.closeIdleConnections === "function") {
+    server.closeIdleConnections();
+  }
+  server.close(async () => {
+    try {
+      await db.destroy();
+    } finally {
+      process.exit(0);
+    }
+  });
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => shutdown("SIGINT"));
