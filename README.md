@@ -1,13 +1,13 @@
 # Room Booking API
 
-![CI](https://github.com/OWNER/room-booking-api/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/justirap/room-booking-api/actions/workflows/ci.yml/badge.svg)
 
 API do rezerwacji sal. Po sklonowaniu repozytorium wystarczy skopiować zmienne środowiskowe i uruchomić Docker Compose.
 
 ## Uruchomienie od zera
 
 ```bash
-git clone <adres-repozytorium>
+git clone https://github.com/justirap/room-booking-api.git
 cd room-booking-api
 cp .env.example .env
 docker compose up --build
