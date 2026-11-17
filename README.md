@@ -1,5 +1,7 @@
 # Room Booking API
 
+![CI](https://github.com/OWNER/room-booking-api/actions/workflows/ci.yml/badge.svg)
+
 API do rezerwacji sal. Po sklonowaniu repozytorium wystarczy skopiować zmienne środowiskowe i uruchomić Docker Compose.
 
 ## Uruchomienie od zera
