@@ -144,7 +144,7 @@ describe("Auth and reservations API", () => {
 
   test("401 without a token", async () => {
     const res = await request(app).get("/api/reservations");
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(401);
     expect(res.body.error.code).toBe("UNAUTHORIZED");
   });
 
